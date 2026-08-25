@@ -10,6 +10,13 @@
   .boot { font-family: system-ui, sans-serif; color: #6b7b8c;
           text-align: center; padding: 60px 20px; font-size: 14px; }
 </style>
+
+<!-- Firebase compat SDK: gives a global `firebase`, which works with the
+     in-browser Babel transform below (no ES modules needed). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-auth-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-database-compat.min.js"></script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -38,6 +45,31 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
      bermula Tahun 1 pada 2027. Bank soalan Tahun 1 perlu disemak semula
      sebelum sesi 2027.
    -------------------------------------------------------------------------
+   REV 44 (25 Ogos 2026) — EDISI FIREBASE
+     • BAIKI SKRIN "MEMUATKAN…" TERSANGKUT: panggilan pangkalan data menunggu
+       tanpa had apabila pelayan tidak dapat dihubungi. Setiap panggilan kini
+       ada had masa 8 saat dan aplikasi sentiasa selesai dimuatkan.
+     • Kad amaran pada skrin hadapan apabila tiada sambungan, atau apabila
+       FIREBASE_CONFIG / TEACHER_UID masih belum diisi.
+     • Jika belum disediakan, Firebase tidak dimulakan langsung — jadi fail
+       ini boleh dibuka untuk melihat reka bentuk tanpa sebarang ralat.
+   REV 43 (25 Ogos 2026) — EDISI FIREBASE / FIREBASE EDITION
+     • Storan artifak DIGANTIKAN dengan Firebase Realtime Database.
+     • Data dipisah: /public/scores (tanpa nama, dibaca semua — untuk
+       kedudukan) dan /records (nama panggilan + butiran, hanya boleh
+       dibaca akaun guru mengikut peraturan pangkalan data).
+     • Kod akses guru DIBUANG. Guru log masuk dengan e-mel + kata laluan
+       melalui Firebase Authentication; murid log masuk tanpa nama
+       (anonymous) secara senyap supaya setiap tulisan berpunca daripada
+       sesi yang sah.
+     • Sejarah murid kekal pada peranti masing-masing (localStorage).
+     • Kiraan "murid" pada kedudukan menggunakan pseudonim pendek (pid),
+       bukan nama.
+     • PERLU: isi FIREBASE_CONFIG dan TEACHER_UID di bawah, dan terbitkan
+       peraturan dalam firebase-rules.json.
+     • NOTA HOS: fail ini perlu dihoskan di luar artifak (contohnya Firebase
+       Hosting, Netlify, GitHub Pages). Kotak pasir artifak mungkin menyekat
+       sambungan ke pangkalan data.
    REV 42 (25 Ogos 2026)
      • Cadangan "(T3)" dibuang daripada contoh nama panggilan. Menambah tahun
        memecahkan sejarah murid apabila mereka naik tahun, dan ejaan yang
@@ -260,7 +292,7 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
    REV 2 — Tahun 1–6, Bab 1 nombor bulat
    REV 1 — Tahun 6 sahaja, Bab 1
    ========================================================================= */
-const REV = 42;   // dipaparkan kepada murid: TIDAK
+const REV = 44;   // dipaparkan kepada murid: TIDAK
 
 const C = {
   ink: "#10243c", paper: "#fdf8f0", card: "#ffffff",
@@ -471,12 +503,21 @@ const bandOf = (p) =>
   : p >= 50 ? { ms: "Sedang Menguasai", en: "Developing", bg: C.amberSoft, fg: C.amber }
   : { ms: "Belum Menguasai", en: "Not Yet Mastered", bg: C.hibiscusSoft, fg: C.hibiscus };
 
-/* ---------------- tutor config + shared storage ---------------- */
-/* Set these two so pupils who deny shared-storage access still see a way to
-   contact you. They are baked into the code, so they never need loading. */
-/* TUKAR INI SEBELUM MENERBITKAN. Kod ini tidak dipaparkan di mana-mana
-   skrin. Jangan gunakan kod mudah diteka. */
-const TUTOR_CODE = "guru123";
+/* ---------------- Firebase configuration ---------------- */
+/* ISI INI SEBELUM GUNA / FILL THESE IN BEFORE USE.
+   The web API key is NOT a secret — it identifies the project. Access is
+   controlled entirely by the database rules (firebase-rules.json). */
+const FIREBASE_CONFIG = {
+  apiKey: "PASTE_YOURS",
+  authDomain: "PASTE_YOURS.firebaseapp.com",
+  databaseURL: "https://PASTE_YOURS-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "PASTE_YOURS",
+  appId: "PASTE_YOURS",
+};
+
+/* The UID of your teacher account (Authentication > Users). Must match the
+   value in firebase-rules.json. */
+const TEACHER_UID = "TEACHER_UID_HERE";
 
 const FALLBACK_WA = "";        // cth: "60123456789" — tiada +, tiada ruang
 const FALLBACK_EMAIL = "";     // cth: "cikgu@contoh.com"
@@ -484,18 +525,13 @@ const FALLBACK_EMAIL = "";     // cth: "cikgu@contoh.com"
 const DEFAULT_CFG = {
   centre: "Pusat Tuisyen",
   tutor: "Cikgu",
-  wa: FALLBACK_WA,   // e.g. 60123456789 — no +, no spaces
-  waGroup: "https://chat.whatsapp.com/HdIqYumx5K3EABTjus1hpl?s=cl&p=a&ilr=1",
+  wa: FALLBACK_WA,
+  waGroup: "",
   email: FALLBACK_EMAIL,
   offer: "Kelas tambahan fokus operasi asas — kumpulan kecil.",
-  code: TUTOR_CODE,
-  /* Announcement board — edit from the tutor screen, shows at the top of the
-     front page. Empty or switched off means the card is not rendered. */
   announce: "",
   announceTitle: "Pengumuman / Announcement",
   announceOn: true,
-  /* Front-page link buttons. Add, rename or remove them from the tutor
-     screen — no code change needed. [{ label, url }] */
   links: [],
 };
 
@@ -509,116 +545,233 @@ function safeUrl(raw) {
   return "";
 }
 
-const hasStore = () => typeof window !== "undefined" && window.storage &&
-                       typeof window.storage.set === "function";
+/* ---------------- Firebase bootstrap ---------------- */
+/* The compat SDK is loaded by <script> tags in the page, so `firebase` is a
+   global here. Everything below degrades quietly if it failed to load —
+   the app still runs, it just cannot save. */
+const CONFIGURED = FIREBASE_CONFIG.apiKey !== "PASTE_YOURS" &&
+                   TEACHER_UID !== "TEACHER_UID_HERE";
 
-/* Results are kept in memory too, so a storage outage never loses the
-   session's records — the tutor screen still shows them. */
-const memRows = [];
-/* The pupil's own attempts are also held in memory for the session, so the
-   history screen is never empty just because storage was denied or slow. */
-const memAttempts = [];
+const fbUp = () => CONFIGURED && typeof firebase !== "undefined" && !!firebase.apps;
 
-async function cfgLoad() {
-  if (!hasStore()) return DEFAULT_CFG;
+/* Realtime Database waits indefinitely when it cannot reach the server, so
+   every call is raced against a timeout. The app must always finish loading
+   and say it is offline, never hang on the loading screen. */
+const NET_MS = 8000;
+function withTimeout(promise, fallback, ms = NET_MS) {
+  return Promise.race([
+    Promise.resolve(promise).catch(() => fallback),
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
+/* Flips to false the first time a call times out or is refused, so the
+   screens can explain themselves instead of failing silently. */
+let online = CONFIGURED;
+const isOnline = () => online;
+
+let db = null, auth = null, authPromise = null;
+
+function fbInit() {
+  if (!fbUp() || db) return;
   try {
-    const r = await window.storage.get("config", true);
-    const saved = r && r.value ? JSON.parse(r.value) : {};
-    return { ...DEFAULT_CFG, ...saved };   // older configs lack newer fields
-  } catch (e) {
-    return DEFAULT_CFG;   // key absent or storage denied
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    auth = firebase.auth();
+    db = firebase.database();
+  } catch (e) { console.error("firebase init", e); }
+}
+
+/* Pupils are signed in anonymously and silently. Every write rule requires
+   auth != null, which blocks anyone who merely knows the database URL. */
+function authReady() {
+  fbInit();
+  if (!auth) return Promise.resolve(null);
+  if (!authPromise) {
+    authPromise = withTimeout(new Promise((resolve) => {
+      const stop = auth.onAuthStateChanged((u) => { if (u) { stop(); resolve(u); } });
+      auth.signInAnonymously().catch((e) => { console.error("auth", e); resolve(null); });
+    }), null);
+    authPromise.then((u) => { if (!u) online = false; });
   }
+  return authPromise;
+}
+
+const isTeacher = () => !!(auth && auth.currentUser && auth.currentUser.uid === TEACHER_UID);
+
+async function teacherSignIn(email, password) {
+  fbInit();
+  if (!auth) throw new Error("offline");
+  const cred = await auth.signInWithEmailAndPassword(email.trim(), password);
+  return cred.user.uid === TEACHER_UID;
+}
+
+async function teacherSignOut() {
+  if (!auth) return;
+  await auth.signOut();
+  authPromise = null;
+  await authReady();          // straight back to an anonymous pupil session
+}
+
+/* A short, stable pseudonym so the ranking can count distinct pupils
+   without a name ever reaching the public data. */
+function pidOf(name, school) {
+  const str = norm(name) + "|" + norm(school);
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+/* Session-memory fallbacks, so one failed write never empties a screen. */
+const memRows = [];
+const memIdeas = [];
+
+/* ---------------- config ---------------- */
+async function cfgLoad() {
+  await authReady();
+  if (!db) return DEFAULT_CFG;
+  try {
+    const snap = await withTimeout(db.ref("config").get(), null);
+    if (!snap) { online = false; return DEFAULT_CFG; }
+    return snap.exists() ? { ...DEFAULT_CFG, ...snap.val() } : DEFAULT_CFG;
+  } catch (e) { return DEFAULT_CFG; }
 }
 
 async function cfgSave(cfg) {
-  if (!hasStore()) return false;
-  try {
-    const r = await window.storage.set("config", JSON.stringify(cfg), true);
-    return !!r;
-  } catch (e) { return false; }
+  if (!db) return false;
+  try { await db.ref("config").set(cfg); return true; }
+  catch (e) { console.error("cfgSave", e); return false; }
 }
 
-/* One shared key holds every result row: one get + one set per test.
-   Rows are trimmed to the most recent 2000 so the value stays well
-   inside the per-key size limit. */
-const ROWS_KEY = "results";
-const ROWS_MAX = 2000;
-
+/* ---------------- results ----------------
+   Two writes per test:
+     /public/scores  no nickname — world-readable, drives the leaderboard
+     /records        full row incl. nickname — teacher-only by the rules   */
 async function rowsLoad() {
+  await authReady();
   let arr = [];
-  if (hasStore()) {
+  if (db) {
     try {
-      const r = await window.storage.get(ROWS_KEY, true);
-      const v = r && r.value ? JSON.parse(r.value) : [];
-      if (Array.isArray(v)) arr = v;
-    } catch (e) { /* key absent or denied — fall back to memory */ }
+      const snap = await withTimeout(db.ref("public/scores").orderByChild("ts").get(), null);
+      if (!snap) online = false;
+      else snap.forEach((c) => { arr.push({ id: c.key, ...c.val() }); });
+    } catch (e) { /* offline or denied — memory only */ }
   }
   const seen = new Set(arr.map((r) => r.id));
   memRows.forEach((r) => { if (!seen.has(r.id)) arr.push(r); });
   return arr.sort((a, b) => a.ts - b.ts);
 }
 
-async function rowsSave(arr) {
-  if (!hasStore()) return false;
-  try {
-    const r = await window.storage.set(ROWS_KEY, JSON.stringify(arr.slice(-ROWS_MAX)), true);
-    return !!r;
-  } catch (e) { return false; }
+/* Teacher only. Throws PERMISSION_DENIED for everyone else, by design. */
+async function recordsLoad() {
+  if (!db) return [];
+  const snap = await withTimeout(db.ref("records").orderByChild("ts").get(), null);
+  if (!snap) throw new Error("offline");
+  const out = [];
+  snap.forEach((c) => { out.push({ id: c.key, ...c.val() }); });
+  return out.sort((a, b) => a.ts - b.ts);
 }
 
 async function rowsAdd(row) {
   memRows.push(row);
-  const all = await rowsLoad();
-  return await rowsSave(all);
-}
-
-/* Suggestions from pupils. Shared storage, same as results — the tutor
-   screen is where they are read. Capped so the key cannot grow unbounded. */
-const IDEAS_KEY = "ideas";
-const IDEAS_MAX = 300;
-const IDEA_CHARS = 500;
-const memIdeas = [];
-
-async function ideasLoad() {
-  let arr = [];
-  if (hasStore()) {
-    try {
-      const r = await window.storage.get(IDEAS_KEY, true);
-      const v = r && r.value ? JSON.parse(r.value) : [];
-      if (Array.isArray(v)) arr = v;
-    } catch (e) { /* key absent or denied */ }
-  }
-  const seen = new Set(arr.map((i) => i.id));
-  memIdeas.forEach((i) => { if (!seen.has(i.id)) arr.push(i); });
-  return arr.sort((a, b) => a.ts - b.ts);
-}
-
-async function ideasSave(arr) {
-  if (!hasStore()) return false;
+  await authReady();
+  if (!db) return false;
   try {
-    const r = await window.storage.set(IDEAS_KEY, JSON.stringify(arr.slice(-IDEAS_MAX)), true);
-    return !!r;
-  } catch (e) { return false; }
+    const id = row.id;
+    const ts = row.ts;
+    const wrote = await withTimeout((async () => {
+    await db.ref("records/" + id).set({
+      name: row.name, school: row.school, state: row.state, year: row.year,
+      correct: row.correct, total: row.total, pct: row.pct, points: row.points,
+      sec: row.sec, err: row.err, ts,
+    });
+    await db.ref("public/scores/" + id).set({
+      school: row.school, state: row.state, year: row.year,
+      pct: row.pct, points: row.points, pid: row.pid, ts,
+    });
+    return true;
+    })(), false);
+    if (!wrote) online = false;
+    return wrote;
+  } catch (e) { console.error("rowsAdd", e); online = false; return false; }
+}
+
+async function rowsRemove(ids) {
+  if (!db) return false;
+  try {
+    const patch = {};
+    ids.forEach((id) => { patch["records/" + id] = null; patch["public/scores/" + id] = null; });
+    await db.ref().update(patch);
+    return true;
+  } catch (e) { console.error("rowsRemove", e); return false; }
+}
+
+/* Restoring a CSV backup — teacher only, one write per row. */
+async function rowsImport(rows) {
+  if (!db) return false;
+  try {
+    const patch = {};
+    rows.forEach((r) => {
+      patch["records/" + r.id] = {
+        name: r.name, school: r.school, state: r.state, year: r.year,
+        correct: r.correct, total: r.total, pct: r.pct, points: r.points,
+        sec: {}, err: {}, ts: r.ts,
+      };
+      patch["public/scores/" + r.id] = {
+        school: r.school, state: r.state, year: r.year,
+        pct: r.pct, points: r.points, pid: pidOf(r.name, r.school), ts: r.ts,
+      };
+    });
+    await db.ref().update(patch);
+    return true;
+  } catch (e) { console.error("rowsImport", e); return false; }
+}
+
+/* ---------------- suggestions ---------------- */
+async function ideasLoad() {
+  if (!db) return [...memIdeas];
+  try {
+    const snap = await withTimeout(db.ref("ideas").orderByChild("ts").get(), null);
+    if (!snap) return [...memIdeas];
+    const out = [];
+    snap.forEach((c) => { out.push({ id: c.key, ...c.val() }); });
+    const seen = new Set(out.map((i) => i.id));
+    memIdeas.forEach((i) => { if (!seen.has(i.id)) out.push(i); });
+    return out.sort((a, b) => a.ts - b.ts);
+  } catch (e) { return [...memIdeas]; }   // pupils cannot read these back
 }
 
 async function ideasAdd(idea) {
   memIdeas.push(idea);
-  return await ideasSave(await ideasLoad());
+  await authReady();
+  if (!db) return false;
+  try {
+    const wrote = await withTimeout(db.ref("ideas/" + idea.id).set({
+      text: idea.text, who: idea.who || "", school: idea.school || "", ts: idea.ts,
+    }).then(() => true), false);
+    if (!wrote) online = false;
+    return wrote;
+  } catch (e) { console.error("ideasAdd", e); return false; }
 }
 
-/* Private per-device storage: remembered pupils + their own attempt history.
-   shared = false, so no "Access shared data" prompt is raised. */
-const LOCAL_KEY = "local";
-const blankLocal = () => ({ pupils: [], attempts: [] });
+async function ideasRemove(id) {
+  if (!db) return false;
+  try { await db.ref("ideas/" + id).remove(); return true; }
+  catch (e) { return false; }
+}
 
-async function localLoad() {
+/* ---------------- the pupil's own history ----------------
+   Stays on the pupil's device. Their past results are nobody else's
+   business, and keeping them local means no per-pupil account is needed. */
+const LOCAL_KEY = "ujian.local.v1";
+const blankLocal = () => ({ pupils: [], attempts: [] });
+const memAttempts = [];
+
+function localLoad() {
   let v = null;
-  if (hasStore()) {
-    try {
-      const r = await window.storage.get(LOCAL_KEY, false);
-      v = r && r.value ? JSON.parse(r.value) : null;
-    } catch (e) { v = null; }
-  }
+  try {
+    const raw = window.localStorage.getItem(LOCAL_KEY);
+    v = raw ? JSON.parse(raw) : null;
+  } catch (e) { v = null; }
   const out = (v && typeof v === "object")
     ? { pupils: v.pupils || [], attempts: v.attempts || [] }
     : blankLocal();
@@ -635,12 +788,11 @@ async function localLoad() {
   return out;
 }
 
-async function localSave(data) {
-  if (!hasStore()) return false;
+function localSave(data) {
   try {
     const trimmed = { pupils: data.pupils.slice(-40), attempts: data.attempts.slice(-300) };
-    const r = await window.storage.set(LOCAL_KEY, JSON.stringify(trimmed), false);
-    return !!r;
+    window.localStorage.setItem(LOCAL_KEY, JSON.stringify(trimmed));
+    return true;
   } catch (e) { return false; }
 }
 
@@ -713,7 +865,7 @@ function leaderboard(rows, dir, { year = 0, state = "" } = {}) {
     school,
     state: dir.state.get(school) || rs[0].state || "—",
     tests: rs.length,
-    pupils: new Set(rs.map((r) => norm(r.name))).size,
+    pupils: new Set(rs.map((r) => r.pid || r.id)).size,
     points: rs.reduce((s, r) => s + r.points, 0),
     median: median(rs.map((r) => r.pct)),
   }));
@@ -1019,16 +1171,20 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      const [c, r, l, ig] = await Promise.all([cfgLoad(), rowsLoad(), localLoad(), ideasLoad()]);
-      setCfg(c); setRows(r); setLocal(l); setIdeas(ig);
+      const [c, r] = await Promise.all([cfgLoad(), rowsLoad()]);
+      const l = localLoad();
+      setCfg(c); setRows(r); setLocal(l);
       const last = l.pupils[l.pupils.length - 1];
       if (last) setPupil(last);
       setReady(true);
     })();
+    /* Belt and braces: whatever happens above, show the app. */
+    const t = setTimeout(() => setReady(true), NET_MS + 2000);
+    return () => clearTimeout(t);
   }, []);
 
   const refreshRows = async () => setRows(await rowsLoad());
-  const refreshIdeas = async () => setIdeas(await ideasLoad());
+  const refreshIdeas = async () => setIdeas(await ideasLoad());   // teacher only
 
   /* ---- flow ---- */
   const startYear = (y) => { pending.current = 0; setYear(y); setStack([]); setScreen("reg"); };
@@ -1061,6 +1217,7 @@ function App() {
       id: uid(), ts: Date.now(),
       name: pupil.name, school: pupil.school, state: pupil.state,
       year, correct, total: items.length, pct, points: pointsOf(pct), sec, err,
+      pid: pidOf(pupil.name, pupil.school),
     };
 
     setResult({ row, marks });
@@ -1074,7 +1231,7 @@ function App() {
     pupils.push({ name: pupil.name, school: pupil.school, state: pupil.state });
     const next = { pupils, attempts: [...local.attempts, row] };
     setLocal(next);
-    const localOK = await localSave(next);
+    const localOK = localSave(next);
     setSaveNote(localOK
       ? "Keputusan disimpan pada peranti ini. / Saved on this device."
       : "Keputusan disimpan untuk sesi ini sahaja. / Kept for this session only.");
@@ -1085,8 +1242,8 @@ function App() {
       ? "Keputusan disimpan pada peranti ini. / Saved on this device."
       : "Keputusan disimpan untuk sesi ini sahaja — tangkap layar laporan ini. / Kept for this session only — screenshot this report.")
       + (sharedOK
-        ? " Rekod guru dikemas kini. / Teacher's records updated."
-        : " Rekod guru belum dikemas kini. / Teacher's records not updated yet."));
+        ? " Rekod dihantar. / Result submitted."
+        : " Rekod belum dihantar — sambungan gagal. / Not submitted — connection failed."));
   };
 
   const titleTap = () => {
@@ -1096,7 +1253,14 @@ function App() {
   };
 
   if (!ready) {
-    return <Shell><div style={{ color: C.slate, padding: 40, textAlign: "center" }}>Memuatkan…</div></Shell>;
+    return (
+      <Shell>
+        <div style={{ color: C.slate, padding: 40, textAlign: "center", lineHeight: 1.6 }}>
+          Memuatkan…
+          <div style={{ fontSize: 12 }}>Loading…</div>
+        </div>
+      </Shell>
+    );
   }
 
   const props = {
@@ -1142,6 +1306,26 @@ function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
           <div style={{ fontSize: 12 }}>16 questions. Instant report for parents and teachers.</div>
         </div>
       </div>
+
+      {!isOnline() && (
+        <Card style={{ background: C.hibiscusSoft, borderColor: "#f3c9cf" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.hibiscus }}>
+            {CONFIGURED
+              ? "Tiada sambungan ke pangkalan data"
+              : "Pangkalan data belum disediakan"}
+          </div>
+          <div style={{ fontSize: 12, color: C.ink, marginTop: 4, lineHeight: 1.5 }}>
+            {CONFIGURED
+              ? "Ujian masih boleh dijawab, tetapi keputusan tidak akan disimpan atau dikira dalam kedudukan."
+              : "FIREBASE_CONFIG dan TEACHER_UID belum diisi dalam fail ini."}
+            <div style={{ color: C.slate }}>
+              {CONFIGURED
+                ? "The test still works, but results will not be saved or counted in the ranking."
+                : "FIREBASE_CONFIG and TEACHER_UID have not been filled in."}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {cfg.announceOn && cfg.announce.trim() && (
         <Card style={{ background: C.amberSoft, borderColor: "#f0dcb4" }}>
@@ -1595,7 +1779,7 @@ const linkBtn = {
 /* ---------------- pupil history ---------------- */
 function History({ pupil, local, setLocal, goBack, prevScreen }) {
   const [data, setData] = useState(local);
-  useEffect(() => { (async () => { const l = await localLoad(); setData(l); setLocal(l); })(); }, [setLocal]);
+  useEffect(() => { const l = localLoad(); setData(l); setLocal(l); }, [setLocal]);
 
   const mine = useMemo(
     () => data.attempts.filter((a) => norm(a.name) === norm(pupil.name)).sort((a, b) => b.ts - a.ts),
@@ -1645,14 +1829,10 @@ function History({ pupil, local, setLocal, goBack, prevScreen }) {
               </div>
             </div>
           )}
-          {!hasStore() && (
-            <div style={{ marginTop: 10, color: C.hibiscus }}>
-              Storan peranti tidak tersedia dalam pelayar ini, jadi keputusan hanya kekal untuk sesi semasa.
-              <div style={{ fontSize: 12 }}>
-                Device storage is unavailable in this browser, so results only last for the current session.
-              </div>
-            </div>
-          )}
+          <div style={{ marginTop: 10, fontSize: 12 }}>
+            Keputusan lampau disimpan pada peranti ini sahaja, bukan di pelayan.
+            <div>Past results are kept on this device only, not on the server.</div>
+          </div>
         </div></Card>
       )}
 
@@ -1843,13 +2023,26 @@ function Ideas({ pupil, goBack, refreshIdeas }) {
 }
 
 /* ---------------- tutor gate ---------------- */
-function Gate({ cfg, setScreen, setTutorOK }) {
-  const [code, setCode] = useState("");
-  const [err, setErr] = useState(false);
-  const submit = () => {
-    if (code.trim() === (cfg.code || TUTOR_CODE)) { setTutorOK(true); setScreen("tutor"); }
-    else setErr(true);
+function Gate({ setScreen, setTutorOK }) {
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true); setErr("");
+    try {
+      const ok = await teacherSignIn(email, pw);
+      if (ok) { setTutorOK(true); setScreen("tutor"); }
+      else { setErr("Akaun ini bukan akaun guru. / That is not the teacher account."); }
+    } catch (e) {
+      setErr(e && e.code === "auth/network-request-failed"
+        ? "Tiada sambungan. / No connection."
+        : "E-mel atau kata laluan salah. / Wrong email or password.");
+    }
+    setBusy(false);
   };
+
   return (
     <Shell onBack={() => setScreen("home")} backLabel="Kembali / Back">
       <div style={{ fontFamily: display, fontSize: 26, fontWeight: 700, lineHeight: 1.1 }}>Skrin Guru</div>
@@ -1857,15 +2050,26 @@ function Gate({ cfg, setScreen, setTutorOK }) {
         Teacher Screen
       </div>
       <Card>
-        <Field label="Kod akses / Access code">
-          <input type="password" value={code} style={inputStyle} autoFocus
-            onChange={(e) => { setCode(e.target.value); setErr(false); }}
+        <Field label="E-mel / Email">
+          <input type="email" value={email} style={inputStyle} autoFocus inputMode="email"
+            autoComplete="username"
+            onChange={(e) => { setEmail(e.target.value); setErr(""); }} />
+        </Field>
+        <Field label="Kata laluan / Password">
+          <input type="password" value={pw} style={inputStyle} autoComplete="current-password"
+            onChange={(e) => { setPw(e.target.value); setErr(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
         </Field>
-        {err && <div style={{ color: C.hibiscus, fontSize: 12, marginBottom: 10 }}>
-          Kod tidak sah. Cuba lagi. / That code is not valid. Try again.
+        {err && <div style={{ color: C.hibiscus, fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
+          {err}
         </div>}
-        <Btn full tone="ink" onClick={submit}>Masuk / Enter</Btn>
+        <Btn full tone="ink" disabled={busy || !email.trim() || !pw} onClick={submit}>
+          {busy ? "Log masuk… / Signing in…" : "Log masuk / Sign in"}
+        </Btn>
+        <div style={{ fontSize: 11, color: C.slate, marginTop: 10, lineHeight: 1.5 }}>
+          Rekod murid hanya boleh dibaca oleh akaun guru ini.
+          <div>Pupil records can only be read by this teacher account.</div>
+        </div>
       </Card>
     </Shell>
   );
@@ -1882,7 +2086,17 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
   const [imp, setImp] = useState("");
   const [impInfo, setImpInfo] = useState(null);
 
-  const sorted = useMemo(() => [...rows].sort((a, b) => b.ts - a.ts), [rows]);
+  /* The teacher reads the FULL rows (with nicknames) from /records — pupils
+     only ever see /public/scores, which carries no names at all. */
+  const [recs, setRecs] = useState([]);
+  const [loadErr, setLoadErr] = useState("");
+  const pullRecords = async () => {
+    try { setRecs(await recordsLoad()); setLoadErr(""); }
+    catch (e) { setLoadErr("Tidak dapat membaca rekod. / Could not read records."); }
+  };
+  useEffect(() => { pullRecords(); refreshIdeas(); }, []);
+
+  const sorted = useMemo(() => [...recs].sort((a, b) => b.ts - a.ts), [recs]);
 
   const columns = ["Tarikh", "Nama", "Sekolah", "Negeri", "Tahun", "Betul", "Jumlah", "Peratus", "Mata"];
   const table = useMemo(() => {
@@ -1913,11 +2127,14 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
   };
 
   const removeRows = async (keep) => {
-    const next = rows.filter(keep);
-    memRows.length = 0; next.forEach((r) => memRows.push(r));
-    await rowsSave(next);
+    const gone = recs.filter((r) => !keep(r)).map((r) => r.id);
+    if (!gone.length) return;
+    const ok = await rowsRemove(gone);
+    memRows.length = 0;
+    await pullRecords();
     setRows(await rowsLoad());
-    setNote("Rekod dikemas kini. / Records updated.");
+    setNote(ok ? `${gone.length} rekod dipadam. / ${gone.length} records deleted.`
+               : "Gagal memadam. / Delete failed.");
   };
 
   const saveCfg = async () => {
@@ -1932,19 +2149,26 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
                 ["tetapan", "Tetapan"]];
 
   const removeIdea = async (id) => {
-    const next = ideas.filter((i) => i.id !== id);
-    memIdeas.length = 0; next.forEach((i) => memIdeas.push(i));
-    await ideasSave(next);
+    const ok = await ideasRemove(id);
+    memIdeas.length = 0;
     await refreshIdeas();
-    setNote("Cadangan dipadam. / Suggestion deleted.");
+    setNote(ok ? "Cadangan dipadam. / Suggestion deleted."
+               : "Gagal memadam. / Delete failed.");
   };
 
   return (
     <Shell onBack={() => setScreen("home")} backLabel="Kembali / Back">
       <div style={{ fontFamily: display, fontSize: 26, fontWeight: 700, lineHeight: 1.1 }}>Skrin Guru</div>
       <div style={{ fontFamily: display, fontSize: 16, color: C.slate }}>Teacher Screen</div>
-      <div style={{ color: C.slate, fontSize: 13, margin: "6px 0 12px" }}>
-        {rows.length} rekod/records · {dir.names.length} sekolah/schools
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                    gap: 10, margin: "6px 0 12px" }}>
+        <div style={{ color: C.slate, fontSize: 13 }}>
+          {recs.length} rekod/records · {dir.names.length} sekolah/schools
+        </div>
+        <button onClick={async () => { await teacherSignOut(); setScreen("home"); }} style={{
+          background: "none", border: "none", color: C.hibiscus, fontSize: 12,
+          fontWeight: 700, cursor: "pointer", flexShrink: 0,
+        }}>Log keluar / Sign out</button>
       </div>
       {/* Build marker — teacher screen only, never shown to pupils. Open this
           screen on a published link to confirm which build is live. */}
@@ -1974,8 +2198,14 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <Btn size="sm" tone="ghost" onClick={copyTSV}>Salin / Copy</Btn>
             <Btn size="sm" tone="ghost" onClick={downloadCSV}>CSV</Btn>
-            <Btn size="sm" tone="quiet" onClick={refreshRows}>Muat semula / Refresh</Btn>
+            <Btn size="sm" tone="quiet" onClick={async () => { await pullRecords(); refreshRows(); }}>
+              Muat semula / Refresh
+            </Btn>
           </div>
+
+          {loadErr && <Card style={{ background: C.hibiscusSoft, borderColor: C.hibiscusSoft }}>
+            <div style={{ fontSize: 12, color: C.hibiscus, fontWeight: 700 }}>{loadErr}</div>
+          </Card>}
 
           {/* Manual copy sits at the TOP — the record list below grows long. */}
           {sorted.length > 0 && (
@@ -2022,11 +2252,10 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
                     onClick={() => setImpInfo(parseBackup(imp))}>Semak / Check</Btn>
                   <Btn size="sm" tone="ink" disabled={!impInfo || !impInfo.rows.length}
                     onClick={async () => {
-                      const have = new Set(rows.map((r) => r.id));
+                      const have = new Set(recs.map((r) => r.id));
                       const add = impInfo.rows.filter((r) => !have.has(r.id));
-                      const merged = [...rows, ...add].sort((a, b) => a.ts - b.ts);
-                      memRows.length = 0; merged.forEach((r) => memRows.push(r));
-                      const ok = await rowsSave(merged);
+                      const ok = await rowsImport(add);
+                      await pullRecords();
                       setRows(await rowsLoad());
                       setImp(""); setImpInfo(null); setShowImport(false);
                       setNote(`${add.length} rekod ditambah, ${impInfo.rows.length - add.length} sudah ada. `
@@ -2198,15 +2427,6 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
 
       {tab === "tetapan" && (
         <Card>
-          {(draft.code || TUTOR_CODE) === "guru123" && (
-            <div style={{
-              background: C.hibiscusSoft, color: C.hibiscus, borderRadius: 12,
-              padding: "10px 12px", fontSize: 12, fontWeight: 700, marginBottom: 14, lineHeight: 1.5,
-            }}>
-              Kod akses masih kod lalai. Tukar sebelum memberikan pautan kepada murid.
-              <div>Still the default access code. Change it before sharing the link.</div>
-            </div>
-          )}
           <Field label="Nama pusat tuisyen / Centre name">
             <input style={inputStyle} value={draft.centre}
               onChange={(e) => setDraft({ ...draft, centre: e.target.value })} />
@@ -2331,11 +2551,17 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
             <input style={inputStyle} value={draft.offer}
               onChange={(e) => setDraft({ ...draft, offer: e.target.value })} />
           </Field>
-          <Field label="Kod akses guru / Teacher access code"
-            sub="Tidak dipaparkan di skrin murid. / Never shown on pupil screens.">
-            <input style={inputStyle} value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })} />
-          </Field>
+          <div style={{
+            fontSize: 11, color: C.slate, marginBottom: 14, lineHeight: 1.5,
+            background: "#fffdf8", border: `1px solid ${C.rule}`, borderRadius: 12, padding: 12,
+          }}>
+            Kata laluan guru diuruskan oleh Firebase Authentication, bukan disimpan di sini.
+            Tukar kata laluan melalui konsol Firebase.
+            <div>
+              The teacher password is managed by Firebase Authentication, not stored here.
+              Change it from the Firebase console.
+            </div>
+          </div>
           <Btn full tone="ink" onClick={saveCfg}>Simpan tetapan / Save settings</Btn>
         </Card>
       )}
