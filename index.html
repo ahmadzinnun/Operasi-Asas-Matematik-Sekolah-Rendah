@@ -13,9 +13,9 @@
 
 <!-- Firebase compat SDK: gives a global `firebase`, which works with the
      in-browser Babel transform below (no ES modules needed). -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-app-compat.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-auth-compat.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/firebase-database-compat.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -45,6 +45,12 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
      bermula Tahun 1 pada 2027. Bank soalan Tahun 1 perlu disemak semula
      sebelum sesi 2027.
    -------------------------------------------------------------------------
+   REV 46 (26 Ogos 2026) — EDISI FIREBASE
+     • Pustaka Firebase kini dimuatkan daripada www.gstatic.com (sumber rasmi
+       Google) dan bukan cdnjs — laluan fail "compat" pada cdnjs tidak sama
+       dan boleh menyebabkan ralat 404, lalu tiada objek `firebase` langsung.
+     • Kad amaran kini menyatakan SEBAB: pustaka gagal dimuat, log masuk
+       gagal, atau pangkalan data tidak dapat dibaca.
    REV 45 (26 Ogos 2026) — EDISI FIREBASE
      • FIREBASE_CONFIG dan TEACHER_UID projek "operasi-asas-matematik" telah
        diisi. Fail ini sedia untuk dimuat naik ke Netlify.
@@ -298,7 +304,7 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
    REV 2 — Tahun 1–6, Bab 1 nombor bulat
    REV 1 — Tahun 6 sahaja, Bab 1
    ========================================================================= */
-const REV = 45;   // dipaparkan kepada murid: TIDAK
+const REV = 46;   // dipaparkan kepada murid: TIDAK
 
 const C = {
   ink: "#10243c", paper: "#fdf8f0", card: "#ffffff",
@@ -576,12 +582,21 @@ function withTimeout(promise, fallback, ms = NET_MS) {
 /* Flips to false the first time a call times out or is refused, so the
    screens can explain themselves instead of failing silently. */
 let online = CONFIGURED;
+let offlineWhy = CONFIGURED ? "" : "config";
 const isOnline = () => online;
+const offlineReason = () => offlineWhy;
 
 let db = null, auth = null, authPromise = null;
 
 function fbInit() {
-  if (!fbUp() || db) return;
+  if (db) return;
+  if (CONFIGURED && typeof firebase === "undefined") {
+    /* The SDK <script> tags did not load — a blocked CDN, an offline
+       device, or a content blocker. Nothing else can work. */
+    online = false; offlineWhy = "sdk";
+    return;
+  }
+  if (!fbUp()) return;
   try {
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     auth = firebase.auth();
@@ -599,7 +614,7 @@ function authReady() {
       const stop = auth.onAuthStateChanged((u) => { if (u) { stop(); resolve(u); } });
       auth.signInAnonymously().catch((e) => { console.error("auth", e); resolve(null); });
     }), null);
-    authPromise.then((u) => { if (!u) online = false; });
+    authPromise.then((u) => { if (!u) { online = false; offlineWhy = offlineWhy || "auth"; } });
   }
   return authPromise;
 }
@@ -639,7 +654,7 @@ async function cfgLoad() {
   if (!db) return DEFAULT_CFG;
   try {
     const snap = await withTimeout(db.ref("config").get(), null);
-    if (!snap) { online = false; return DEFAULT_CFG; }
+    if (!snap) { online = false; offlineWhy = offlineWhy || "read"; return DEFAULT_CFG; }
     return snap.exists() ? { ...DEFAULT_CFG, ...snap.val() } : DEFAULT_CFG;
   } catch (e) { return DEFAULT_CFG; }
 }
@@ -660,7 +675,7 @@ async function rowsLoad() {
   if (db) {
     try {
       const snap = await withTimeout(db.ref("public/scores").orderByChild("ts").get(), null);
-      if (!snap) online = false;
+      if (!snap) { online = false; offlineWhy = offlineWhy || "read"; }
       else snap.forEach((c) => { arr.push({ id: c.key, ...c.val() }); });
     } catch (e) { /* offline or denied — memory only */ }
   }
@@ -1330,6 +1345,17 @@ function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
               {CONFIGURED
                 ? "The test still works, but results will not be saved or counted in the ranking."
                 : "FIREBASE_CONFIG and TEACHER_UID have not been filled in."}
+            </div>
+            {/* Names the cause, so setup problems are not guesswork. */}
+            <div style={{ marginTop: 6, fontSize: 11, color: C.slate }}>
+              {offlineReason() === "sdk" &&
+                "Sebab: pustaka Firebase gagal dimuatkan (CDN disekat?). / Cause: the Firebase SDK failed to load."}
+              {offlineReason() === "auth" &&
+                "Sebab: log masuk tanpa nama gagal — semak Authorized domains. / Cause: anonymous sign-in failed — check Authorized domains."}
+              {offlineReason() === "read" &&
+                "Sebab: pangkalan data tidak dapat dibaca — semak Rules dan databaseURL. / Cause: the database could not be read — check Rules and databaseURL."}
+              {offlineReason() === "config" &&
+                "Sebab: tetapan belum diisi. / Cause: configuration not filled in."}
             </div>
           </div>
         </Card>
