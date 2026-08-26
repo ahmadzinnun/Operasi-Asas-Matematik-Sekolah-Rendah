@@ -45,6 +45,12 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
      bermula Tahun 1 pada 2027. Bank soalan Tahun 1 perlu disemak semula
      sebelum sesi 2027.
    -------------------------------------------------------------------------
+   REV 45 (26 Ogos 2026) — EDISI FIREBASE
+     • FIREBASE_CONFIG dan TEACHER_UID projek "operasi-asas-matematik" telah
+       diisi. Fail ini sedia untuk dimuat naik ke Netlify.
+     • Kunci API web BUKAN rahsia — ia hanya mengenal pasti projek. Kawalan
+       akses datang sepenuhnya daripada peraturan pangkalan data. Kata laluan
+       guru TIDAK PERNAH disimpan dalam fail ini.
    REV 44 (25 Ogos 2026) — EDISI FIREBASE
      • BAIKI SKRIN "MEMUATKAN…" TERSANGKUT: panggilan pangkalan data menunggu
        tanpa had apabila pelayan tidak dapat dihubungi. Setiap panggilan kini
@@ -292,7 +298,7 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
    REV 2 — Tahun 1–6, Bab 1 nombor bulat
    REV 1 — Tahun 6 sahaja, Bab 1
    ========================================================================= */
-const REV = 44;   // dipaparkan kepada murid: TIDAK
+const REV = 45;   // dipaparkan kepada murid: TIDAK
 
 const C = {
   ink: "#10243c", paper: "#fdf8f0", card: "#ffffff",
@@ -508,16 +514,18 @@ const bandOf = (p) =>
    The web API key is NOT a secret — it identifies the project. Access is
    controlled entirely by the database rules (firebase-rules.json). */
 const FIREBASE_CONFIG = {
-  apiKey: "PASTE_YOURS",
-  authDomain: "PASTE_YOURS.firebaseapp.com",
-  databaseURL: "https://PASTE_YOURS-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "PASTE_YOURS",
-  appId: "PASTE_YOURS",
+  apiKey: "AIzaSyBSD_uy4I_KffbRuukqSI0FIM5TptLNI9M",
+  authDomain: "operasi-asas-matematik.firebaseapp.com",
+  databaseURL: "https://operasi-asas-matematik-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "operasi-asas-matematik",
+  storageBucket: "operasi-asas-matematik.firebasestorage.app",
+  messagingSenderId: "75427839921",
+  appId: "1:75427839921:web:e52ceb65084843b2fc4790",
 };
 
 /* The UID of your teacher account (Authentication > Users). Must match the
    value in firebase-rules.json. */
-const TEACHER_UID = "TEACHER_UID_HERE";
+const TEACHER_UID = "3VmkwVz7eOb1c0frkGfcVTEJ09o2";
 
 const FALLBACK_WA = "";        // cth: "60123456789" — tiada +, tiada ruang
 const FALLBACK_EMAIL = "";     // cth: "cikgu@contoh.com"
