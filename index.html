@@ -1702,9 +1702,9 @@ function Test({ items, answers, setAnswers, idx, setIdx, finish, setScreen, year
 function Report({ result, saveNote, cfg, setScreen, beginTest, year, go, goRoot }) {
   const { row, marks } = result;
   const band = bandOf(row.pct);
-  const secKeys = Object.keys(row.sec);
+  const secKeys = Object.keys(row.sec || {});
 
-  const errList = Object.entries(row.err).sort((a, b) => b[1] - a[1]);
+  const errList = Object.entries(row.err || {}).sort((a, b) => b[1] - a[1]);
   const weak = secKeys.filter((k) => (row.sec[k].c / row.sec[k].n) * 100 < 80);
 
   const waText = encodeURIComponent(
@@ -1886,10 +1886,11 @@ function History({ pupil, local, setLocal, goBack, prevScreen }) {
 
   const secProgress = useMemo(() => {
     const chrono = [...mine].reverse();
-    const keys = [...new Set(chrono.flatMap((a) => Object.keys(a.sec)))];
+    const keys = [...new Set(chrono.flatMap((a) => Object.keys(a.sec || {})))];
     return keys.map((k) => ({
       key: k,
-      series: chrono.filter((a) => a.sec[k]).map((a) => Math.round((a.sec[k].c / a.sec[k].n) * 100)),
+      series: chrono.filter((a) => a.sec && a.sec[k])
+        .map((a) => Math.round((a.sec[k].c / a.sec[k].n) * 100)),
     }));
   }, [mine]);
 
@@ -1962,7 +1963,7 @@ function History({ pupil, local, setLocal, goBack, prevScreen }) {
               <div style={{ ...quizStyle, fontSize: 24, fontWeight: 700, color: b.fg }}>{a.pct}%</div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-              {Object.entries(a.sec).map(([k, s]) => (
+              {Object.entries(a.sec || {}).map(([k, s]) => (
                 <Pill key={k} bg="#f3efe7" fg={C.ink}>{SECTIONS[k].ms} {s.c}/{s.n}</Pill>
               ))}
             </div>
@@ -2404,7 +2405,7 @@ function Tutor({ cfg, setCfg, rows, setRows, refreshRows, dir, setScreen,
                 }}>Padam / Delete</button>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-                {r.imported
+                {(r.imported || !r.sec || !Object.keys(r.sec).length)
                   ? <Pill bg="#f3efe7" fg={C.slate}>dipulihkan / restored · {r.correct}/{r.total}</Pill>
                   : Object.entries(r.sec).map(([k, sc]) => (
                       <Pill key={k} bg="#f3efe7" fg={C.ink}>{SECTIONS[k].ms} {sc.c}/{sc.n}</Pill>
