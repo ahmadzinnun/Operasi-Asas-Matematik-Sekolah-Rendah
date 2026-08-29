@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Ujian Diagnostik Operasi Asas</title>
+<title>Operasi Asas Matematik Sekolah Rendah</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Nunito+Sans:wght@400;600;700&family=Playfair+Display:ital,wght@1,500;1,600;1,700&family=Caveat:wght@600;700&display=swap">
+
 <style>
   html, body { margin: 0; padding: 0; background: #fdf8f0; }
   #root { min-height: 100vh; }
@@ -13,9 +17,26 @@
 
 <!-- Firebase compat SDK: gives a global `firebase`, which works with the
      in-browser Babel transform below (no ES modules needed). -->
+<!-- Your project settings. Edit firebase-config.js, not this file. -->
+<script src="firebase-config.js"></script>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<!-- Fallback: some networks and sandboxes block gstatic.com. If nothing
+     loaded, pull the same compat builds from cdnjs instead. document.write
+     runs while the page is still parsing, so these load before the app. -->
+<script>
+if (typeof firebase === "undefined") {
+  var FB_CDN = "https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.0/";
+  ["firebase-app-compat.min.js",
+   "firebase-auth-compat.min.js",
+   "firebase-database-compat.min.js"].forEach(function (f) {
+    document.write('<scr' + 'ipt src="' + FB_CDN + f + '"><\/scr' + 'ipt>');
+  });
+}
+</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -45,6 +66,11 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
      bermula Tahun 1 pada 2027. Bank soalan Tahun 1 perlu disemak semula
      sebelum sesi 2027.
    -------------------------------------------------------------------------
+   REV 47 (26 Ogos 2026) — EDISI FIREBASE
+     • Tetapan Firebase dipindahkan ke fail berasingan, firebase-config.js.
+       Muat naik KEDUA-DUA fail ke Netlify. Jika kunci API salah, betulkan
+       fail kecil itu sahaja — tidak perlu mencari dalam fail aplikasi.
+     • Kad amaran menyatakan "kunci API tidak sah" secara khusus.
    REV 46 (26 Ogos 2026) — EDISI FIREBASE
      • Pustaka Firebase kini dimuatkan daripada www.gstatic.com (sumber rasmi
        Google) dan bukan cdnjs — laluan fail "compat" pada cdnjs tidak sama
@@ -304,7 +330,7 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
    REV 2 — Tahun 1–6, Bab 1 nombor bulat
    REV 1 — Tahun 6 sahaja, Bab 1
    ========================================================================= */
-const REV = 46;   // dipaparkan kepada murid: TIDAK
+const REV = 55;   // dipaparkan kepada murid: TIDAK
 
 const C = {
   ink: "#10243c", paper: "#fdf8f0", card: "#ffffff",
@@ -324,8 +350,8 @@ const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\u202F");
    only the starting size, so the first paint is close. */
 function qSize(text) {
   const chars = text.length;
-  const fit = Math.floor(300 / (chars * 0.46));   // Caveat runs narrow
-  return Math.max(18, Math.min(46, fit));
+  const fit = Math.floor(340 / (chars * 0.52));   // Playfair italic, weight 500
+  return Math.max(16, Math.min(46, fit));
 }
 const ri = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -519,7 +545,13 @@ const bandOf = (p) =>
 /* ISI INI SEBELUM GUNA / FILL THESE IN BEFORE USE.
    The web API key is NOT a secret — it identifies the project. Access is
    controlled entirely by the database rules (firebase-rules.json). */
-const FIREBASE_CONFIG = {
+/* Both values are read from firebase-config.js, which sits next to this
+   page. Keeping them in a separate 10-line file means setup mistakes are
+   fixed there, not by searching through the whole app. */
+/* Project settings are baked in here AND can be overridden by
+   firebase-config.js if that file is uploaded alongside this page. Having
+   both means a missing config file cannot break the site. */
+const BUILT_IN_CONFIG = {
   apiKey: "AIzaSyBSD_uy4l_KffbRuukqSl0FlM5TptLNl9M",
   authDomain: "operasi-asas-matematik.firebaseapp.com",
   databaseURL: "https://operasi-asas-matematik-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -527,11 +559,15 @@ const FIREBASE_CONFIG = {
   storageBucket: "operasi-asas-matematik.firebasestorage.app",
   messagingSenderId: "75427839921",
   appId: "1:75427839921:web:e52ceb65084843b2fc4790",
+  measurementId: "G-3XYX5SMXGY",
 };
 
-/* The UID of your teacher account (Authentication > Users). Must match the
-   value in firebase-rules.json. */
-const TEACHER_UID = "3VmkwVz7eOb1c0frkGfcVTEJ09o2";
+const FIREBASE_CONFIG =
+  (typeof window !== "undefined" && window.FB_CONFIG) || BUILT_IN_CONFIG;
+
+const TEACHER_UID =
+  (typeof window !== "undefined" && window.FB_TEACHER_UID) ||
+  "3VmkwVz7eOb1c0frkGfcVTEJ09o2";
 
 const FALLBACK_WA = "";        // cth: "60123456789" — tiada +, tiada ruang
 const FALLBACK_EMAIL = "";     // cth: "cikgu@contoh.com"
@@ -612,7 +648,11 @@ function authReady() {
   if (!authPromise) {
     authPromise = withTimeout(new Promise((resolve) => {
       const stop = auth.onAuthStateChanged((u) => { if (u) { stop(); resolve(u); } });
-      auth.signInAnonymously().catch((e) => { console.error("auth", e); resolve(null); });
+      auth.signInAnonymously().catch((e) => {
+        console.error("auth", e);
+        if (e && String(e.code).indexOf("api-key") !== -1) offlineWhy = "apikey";
+        resolve(null);
+      });
     }), null);
     authPromise.then((u) => { if (!u) { online = false; offlineWhy = offlineWhy || "auth"; } });
   }
@@ -956,8 +996,10 @@ const dtstr = (ts) => {
 };
 
 /* ---------------- shared UI atoms ---------------- */
+/* The fonts are loaded by <link> tags in the page head — an @import inside
+   an injected <style> is only honoured before other rules, so it failed
+   silently and the browser fell back to Segoe Print. */
 const FONTS = `
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Nunito+Sans:wght@400;600;700&family=Playfair+Display:ital,wght@1,500;1,600;1,700&family=Caveat:wght@600;700&display=swap');
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 input, select, button, textarea { font-family: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible {
@@ -971,7 +1013,15 @@ const body = "'Nunito Sans', system-ui, -apple-system, sans-serif";
 /* Questions and written answers use an italic serif — numerals read as
    handwritten arithmetic rather than interface text. */
 const quiz = "'Playfair Display', Georgia, 'Times New Roman', serif";
-const quizStyle = { fontFamily: quiz, fontStyle: "italic", fontWeight: 600 };
+/* LINING figures (as in REV 52). Every digit sits on the baseline at the
+   same height, which is what a sum needs — an 8 riding above a 1 reads as a
+   mistake to a child. The trade is plainer letterforms: Playfair's old-style
+   1, 2 and 5 are prettier, but they sit at uneven heights. Alignment won. */
+const quizStyle = {
+  fontFamily: quiz, fontStyle: "italic", fontWeight: 600,
+  fontVariantNumeric: "lining-nums",
+  fontFeatureSettings: '"lnum" 1, "onum" 0',
+};
 /* What the pupil writes is set in a handwriting face, so their answer never
    looks like part of the printed question. */
 const hand = "'Caveat', 'Segoe Print', cursive";
@@ -1320,13 +1370,17 @@ function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
       <div onClick={titleTap} style={{ cursor: "default", marginBottom: 14 }}>
         <h1 style={{
           fontFamily: display, fontSize: 32, lineHeight: 1.1, margin: "0 0 4px",
-        }}>Ujian Diagnostik<br />Operasi Asas</h1>
-        <div style={{ fontFamily: display, fontSize: 17, color: C.slate, lineHeight: 1.1 }}>
-          Basic Operations Diagnostic Test
+        }}>Operasi Asas<br />Matematik Sekolah Rendah</h1>
+        <div style={{ fontFamily: display, fontSize: 18, color: C.hibiscus,
+                      lineHeight: 1.25, marginTop: 2 }}>
+          (Tambah, Tolak, Darab, dan Bahagi)
         </div>
-        <div style={{ color: C.slate, fontSize: 13, marginTop: 8 }}>
-          16 soalan. Laporan segera untuk ibu bapa dan guru.
-          <div style={{ fontSize: 12 }}>16 questions. Instant report for parents and teachers.</div>
+        <div style={{ fontFamily: display, fontSize: 15, color: C.slate,
+                      lineHeight: 1.3, marginTop: 4 }}>
+          Primary School Basic Operations
+          <div style={{ fontSize: 14 }}>
+            (Addition, Subtraction, Multiplication, and Division)
+          </div>
         </div>
       </div>
 
@@ -1350,6 +1404,8 @@ function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
             <div style={{ marginTop: 6, fontSize: 11, color: C.slate }}>
               {offlineReason() === "sdk" &&
                 "Sebab: pustaka Firebase gagal dimuatkan (CDN disekat?). / Cause: the Firebase SDK failed to load."}
+              {offlineReason() === "apikey" &&
+                "Sebab: kunci API tidak sah — semak apiKey dalam firebase-config.js. / Cause: invalid API key — check apiKey in firebase-config.js."}
               {offlineReason() === "auth" &&
                 "Sebab: log masuk tanpa nama gagal — semak Authorized domains. / Cause: anonymous sign-in failed — check Authorized domains."}
               {offlineReason() === "read" &&
@@ -1432,10 +1488,11 @@ function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
       <Card style={{ background: "#fffdf8" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>💡 Ada cadangan?</div>
-            <div style={{ fontSize: 11, color: C.slate, lineHeight: 1.5, marginTop: 2 }}>
-              Beritahu cikgu apa yang boleh diperbaiki.
-              <div>Tell the teacher what could be better.</div>
+            <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.35 }}>
+              💡 Berikan review atau sebarang cadangan anda
+            </div>
+            <div style={{ fontSize: 11, color: C.slate, lineHeight: 1.5, marginTop: 3 }}>
+              Share a review or any suggestion you have.
             </div>
           </div>
           <Btn size="sm" tone="ghost" onClick={() => go("ideas")}>Hantar / Send</Btn>
@@ -1604,7 +1661,8 @@ function Test({ items, answers, setAnswers, idx, setIdx, finish, setScreen, year
 
       <Card style={{ padding: "28px 16px", textAlign: "center" }}>
         <AutoFitLine text={it.text} max={qSize(it.text)} min={16}
-          style={{ ...handStyle, color: C.ink, lineHeight: 1.3 }} />
+          style={{ ...quizStyle, fontWeight: 500, color: C.ink, lineHeight: 1.35,
+                   letterSpacing: "0.01em" }} />
         <div style={{
           fontSize: 11, fontWeight: 700, letterSpacing: 1, color: C.slate,
           margin: "20px 0 8px",
@@ -1614,8 +1672,8 @@ function Test({ items, answers, setAnswers, idx, setIdx, finish, setScreen, year
           onKeyDown={(e) => { if (e.key === "Enter") next(); }}
           placeholder="?"
           style={{
-            ...inputStyle, ...handStyle, textAlign: "center", color: C.hibiscus,
-            fontSize: 40, lineHeight: 1.1, padding: "10px 10px",
+            ...inputStyle, ...quizStyle, textAlign: "center", color: C.ink,
+            fontSize: 34, fontWeight: 500, lineHeight: 1.2, padding: "12px 10px",
           }} />
       </Card>
 
@@ -1749,7 +1807,7 @@ function Report({ result, saveNote, cfg, setScreen, beginTest, year, go, goRoot 
             <div style={{ flex: 1, minWidth: 0 }}>
               {/* wraps instead of running off the screen */}
               <div style={{
-                ...handStyle, fontSize: 15, lineHeight: 1.45, color: C.ink,
+                ...quizStyle, fontSize: 15, lineHeight: 1.45, color: C.ink,
                 wordBreak: "normal", overflowWrap: "normal",
               }}>
                 {m.it.text}{" "}
@@ -1758,7 +1816,7 @@ function Report({ result, saveNote, cfg, setScreen, beginTest, year, go, goRoot 
               {m.err && (
                 <div style={{ fontSize: 11, color: C.slate, marginTop: 1 }}>
                   Jawapan murid / pupil wrote:{" "}
-                  <span style={{ ...handStyle, color: C.hibiscus, fontSize: 15, whiteSpace: "nowrap" }}>
+                  <span style={{ ...quizStyle, color: C.hibiscus, fontSize: 15, whiteSpace: "nowrap" }}>
                     {m.raw.trim() || "—"}
                   </span>
                 </div>
