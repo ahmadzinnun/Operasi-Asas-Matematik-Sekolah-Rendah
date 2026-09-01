@@ -330,7 +330,7 @@ const { useState, useMemo, useRef, useEffect, useLayoutEffect } = React;
    REV 2 — Tahun 1–6, Bab 1 nombor bulat
    REV 1 — Tahun 6 sahaja, Bab 1
    ========================================================================= */
-const REV = 55;   // dipaparkan kepada murid: TIDAK
+const REV = 61;   // dipaparkan kepada murid: TIDAK
 
 const C = {
   ink: "#10243c", paper: "#fdf8f0", card: "#ffffff",
@@ -916,8 +916,20 @@ function schoolDirectory(rows) {
   return { state, conflicts, names: [...state.keys()].sort() };
 }
 
-function leaderboard(rows, dir, { year = 0, state = "" } = {}) {
-  const use = year ? rows.filter((r) => r.year === year) : rows;
+/* ---- seasons ----
+   The ranking counts only the current school session, so a school that
+   started early cannot hold an unreachable lead forever. Nothing is deleted:
+   past sessions stay in the records and can still be viewed. Malaysian
+   school year runs January to December. */
+const seasonOf = (ts) => new Date(ts).getFullYear();
+const CURRENT_SEASON = seasonOf(Date.now());
+
+const seasonsIn = (rows) =>
+  [...new Set(rows.map((r) => seasonOf(r.ts)))].sort((a, b) => b - a);
+
+function leaderboard(rows, dir, { year = 0, state = "", season = 0 } = {}) {
+  let use = season ? rows.filter((r) => seasonOf(r.ts) === season) : rows;
+  use = year ? use.filter((r) => r.year === year) : use;
   const bySchool = new Map();
   use.forEach((r) => {
     const k = r.school || "—";
@@ -1358,7 +1370,10 @@ function App() {
 
 /* ---------------- home ---------------- */
 function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
-  const top = useMemo(() => leaderboard(rows, dir).slice(0, 5), [rows, dir]);
+  const top = useMemo(
+    () => leaderboard(rows, dir, { season: CURRENT_SEASON }).slice(0, 5),
+    [rows, dir]
+  );
   const links = useMemo(
     () => (cfg.links || [])
       .map((l) => ({ label: (l.label || "").trim() || l.url, url: safeUrl(l.url) }))
@@ -1428,11 +1443,33 @@ function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
         </Card>
       )}
 
+      {links.length > 0 && (
+        <Card>
+          <div style={{ fontFamily: display, fontSize: 18, fontWeight: 700 }}>Pautan</div>
+          <div style={{ fontSize: 11, color: C.slate, marginBottom: 10 }}>Links</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {links.map((l, i) => (
+              <a key={i} href={l.url} target="_blank" rel="noreferrer" style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                gap: 10, padding: "13px 14px", borderRadius: 12, textDecoration: "none",
+                border: `1.5px solid ${C.rule}`, background: "#fff",
+                color: C.ink, fontWeight: 700, fontSize: 14,
+              }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {l.label}
+                </span>
+                <span style={{ color: C.hibiscus, flexShrink: 0 }}>↗</span>
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
           <div>
             <div style={{ fontFamily: display, fontSize: 18, fontWeight: 700 }}>5 Sekolah Teratas</div>
-            <div style={{ fontSize: 11, color: C.slate }}>Top 5 schools</div>
+            <div style={{ fontSize: 11, color: C.slate }}>Top 5 schools · Sesi {CURRENT_SEASON}</div>
           </div>
           <button onClick={() => go("board")} style={{
             background: "none", border: "none", color: C.hibiscus, fontSize: 12,
@@ -1462,28 +1499,6 @@ function Home({ cfg, rows, dir, startYear, setScreen, titleTap, go }) {
           </button>
         ))}
       </div>
-
-      {links.length > 0 && (
-        <Card>
-          <div style={{ fontFamily: display, fontSize: 18, fontWeight: 700 }}>Pautan</div>
-          <div style={{ fontSize: 11, color: C.slate, marginBottom: 10 }}>Links</div>
-          <div style={{ display: "grid", gap: 8 }}>
-            {links.map((l, i) => (
-              <a key={i} href={l.url} target="_blank" rel="noreferrer" style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                gap: 10, padding: "13px 14px", borderRadius: 12, textDecoration: "none",
-                border: `1.5px solid ${C.rule}`, background: "#fff",
-                color: C.ink, fontWeight: 700, fontSize: 14,
-              }}>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {l.label}
-                </span>
-                <span style={{ color: C.hibiscus, flexShrink: 0 }}>↗</span>
-              </a>
-            ))}
-          </div>
-        </Card>
-      )}
 
       <Card style={{ background: "#fffdf8" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1978,7 +1993,12 @@ function History({ pupil, local, setLocal, goBack, prevScreen }) {
 function Board({ rows, dir, pupil, goBack, prevScreen }) {
   const [year, setYear] = useState(0);
   const [state, setState] = useState("");
-  const list = useMemo(() => leaderboard(rows, dir, { year, state }), [rows, dir, year, state]);
+  const [season, setSeason] = useState(CURRENT_SEASON);
+  const seasons = useMemo(() => seasonsIn(rows), [rows]);
+  const list = useMemo(
+    () => leaderboard(rows, dir, { year, state, season }),
+    [rows, dir, year, state, season]
+  );
 
   return (
     <Shell onBack={() => goBack("home")}
@@ -1988,8 +2008,26 @@ function Board({ rows, dir, pupil, goBack, prevScreen }) {
       </div>
       <div style={{ fontFamily: display, fontSize: 16, color: C.slate }}>School Ranking</div>
       <div style={{ color: C.slate, fontSize: 12, margin: "8px 0 14px" }}>
-        Kedudukan mengikut sekolah, bukan nama murid.
-        <div>Schools are ranked, not individual pupils.</div>
+        Kedudukan mengikut sekolah, bukan nama murid. Dikira mengikut sesi.
+        <div>Schools are ranked, not individual pupils. Counted per session.</div>
+      </div>
+
+      {/* Session first — it decides what the rest of the filters apply to. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        {[CURRENT_SEASON, ...seasons.filter((y) => y !== CURRENT_SEASON)].map((y) => (
+          <button key={y} onClick={() => setSeason(y)} style={{
+            background: season === y ? C.hibiscus : "#fff",
+            color: season === y ? "#fff" : C.ink,
+            border: `1.5px solid ${season === y ? C.hibiscus : C.rule}`,
+            borderRadius: 999, padding: "7px 12px",
+            fontSize: 12, fontWeight: 700, cursor: "pointer",
+          }}>Sesi {y}{y === CURRENT_SEASON ? " ·" : ""}</button>
+        ))}
+        <button onClick={() => setSeason(0)} style={{
+          background: season === 0 ? C.ink : "#fff", color: season === 0 ? "#fff" : C.slate,
+          border: `1.5px solid ${C.rule}`, borderRadius: 999, padding: "7px 12px",
+          fontSize: 12, fontWeight: 700, cursor: "pointer",
+        }}>Sepanjang masa / All time</button>
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
@@ -2022,6 +2060,10 @@ function Board({ rows, dir, pupil, goBack, prevScreen }) {
               <i>The median keeps one unusual score from moving a school.</i></li>
           <li>Negeri sekolah ditentukan secara undian majoriti daripada semua pendaftarannya.<br />
               <i>A school's state is decided by majority vote across its registrations.</i></li>
+          <li>Kedudukan dikira mengikut SESI (tahun kalendar). Sesi baharu bermula semula
+              dari sifar supaya sekolah baharu boleh bersaing; sesi lama masih boleh dilihat.<br />
+              <i>Ranked per session (calendar year). Each session starts from zero so new
+              schools can compete; past sessions remain viewable.</i></li>
         </ul>
       </Card>
     </Shell>
